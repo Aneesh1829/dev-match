@@ -21,14 +21,14 @@ const userRoutes = require('./routes/users');
 const recommendationRoutes = require('./routes/recommendations');
 
 // ======================================================
-// APP
+// APP SETUP
 // ======================================================
 
 const app = express();
 const server = http.createServer(app);
 
 // ======================================================
-// ENVIRONMENT
+// ENVIRONMENT VARIABLES
 // ======================================================
 
 const PORT = process.env.PORT || 5000;
@@ -38,45 +38,57 @@ const allowedOrigin =
 
 console.log('======================================');
 console.log('Starting Dev Match Backend');
+console.log('======================================');
 console.log('PORT:', PORT);
 console.log('CLIENT_URL:', allowedOrigin);
 console.log('======================================');
 
 // ======================================================
-// CORS
+// CORS CONFIGURATION
 // ======================================================
 
 const corsOptions = {
   origin: allowedOrigin,
+
   credentials: true,
+
   methods: [
     'GET',
+    'HEAD',
     'POST',
     'PUT',
     'PATCH',
     'DELETE',
     'OPTIONS'
   ],
+
   allowedHeaders: [
     'Content-Type',
     'Authorization'
-  ]
+  ],
+
+  optionsSuccessStatus: 204
 };
 
-// CORS middleware
+// CORS middleware.
+//
+// IMPORTANT:
+// app.use(cors(...)) handles CORS preflight requests
+// automatically for all routes.
+
 app.use(cors(corsOptions));
 
-// IMPORTANT:
-// Explicitly handle ALL OPTIONS requests.
-// Do NOT use app.options(/.*/, ...)
+// ======================================================
+// REQUEST LOGGER
+// ======================================================
 
 app.use((req, res, next) => {
+  console.log(
+    `${new Date().toISOString()} | ${req.method} ${req.originalUrl}`
+  );
 
   if (req.method === 'OPTIONS') {
-
-    console.log('======================================');
-    console.log('CORS PREFLIGHT REQUEST');
-    console.log('Path:', req.originalUrl);
+    console.log('--- CORS PREFLIGHT ---');
     console.log('Origin:', req.headers.origin);
     console.log(
       'Requested Method:',
@@ -86,34 +98,7 @@ app.use((req, res, next) => {
       'Requested Headers:',
       req.headers['access-control-request-headers']
     );
-    console.log('======================================');
-
-    const requestOrigin = req.headers.origin;
-
-    // Allow the deployed frontend
-    if (requestOrigin === allowedOrigin) {
-      res.setHeader(
-        'Access-Control-Allow-Origin',
-        allowedOrigin
-      );
-
-      res.setHeader(
-        'Access-Control-Allow-Credentials',
-        'true'
-      );
-    }
-
-    res.setHeader(
-      'Access-Control-Allow-Methods',
-      'GET,POST,PUT,PATCH,DELETE,OPTIONS'
-    );
-
-    res.setHeader(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization'
-    );
-
-    return res.status(204).end();
+    console.log('----------------------');
   }
 
   next();
@@ -123,10 +108,14 @@ app.use((req, res, next) => {
 // BODY PARSER
 // ======================================================
 
-app.use(express.json({ limit: '10mb' }));
+app.use(
+  express.json({
+    limit: '10mb'
+  })
+);
 
 // ======================================================
-// ROOT TEST
+// ROOT ROUTE
 // ======================================================
 
 app.get('/', (req, res) => {
@@ -155,7 +144,10 @@ const io = new Server(server, {
   cors: {
     origin: allowedOrigin,
     credentials: true,
-    methods: ['GET', 'POST']
+    methods: [
+      'GET',
+      'POST'
+    ]
   }
 });
 
@@ -182,11 +174,8 @@ app.use('/api/recommendations', recommendationRoutes);
 // ======================================================
 
 app.use((req, res) => {
-
   console.log(
-    '404:',
-    req.method,
-    req.originalUrl
+    `404: ${req.method} ${req.originalUrl}`
   );
 
   res.status(404).json({
@@ -194,7 +183,6 @@ app.use((req, res) => {
     method: req.method,
     path: req.originalUrl
   });
-
 });
 
 // ======================================================
@@ -208,14 +196,14 @@ setupSocket(io);
 // ======================================================
 
 const start = async () => {
-
   try {
-
     console.log('Connecting to MySQL...');
 
     await connectDB();
 
-    console.log('MySQL connection successful');
+    console.log('MySQL connected successfully');
+
+    console.log('Checking database seed...');
 
     await seedProblems();
 
@@ -225,26 +213,25 @@ const start = async () => {
       PORT,
       '0.0.0.0',
       () => {
-
         console.log('======================================');
-        console.log(`Server running on port ${PORT}`);
-        console.log(`Client URL: ${allowedOrigin}`);
+        console.log(
+          `Server running on port ${PORT}`
+        );
+        console.log(
+          `Client URL: ${allowedOrigin}`
+        );
         console.log('======================================');
-
       }
     );
 
   } catch (error) {
-
     console.error(
       'Failed to start server:',
       error
     );
 
     process.exit(1);
-
   }
-
 };
 
 start();
