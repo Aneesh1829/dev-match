@@ -20,28 +20,48 @@ const recommendationRoutes = require('./routes/recommendations');
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io setup
+// ======================================================
+// CORS CONFIGURATION
+// ======================================================
+
+const allowedOrigin =
+  process.env.CLIENT_URL || 'http://localhost:5173';
+
+const corsOptions = {
+  origin: allowedOrigin,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+// Express CORS
+app.use(cors(corsOptions));
+
+// Explicitly handle browser preflight requests
+app.options(/.*/, cors(corsOptions));
+
+// ======================================================
+// BODY PARSER
+// ======================================================
+
+app.use(express.json({ limit: '10mb' }));
+
+// ======================================================
+// SOCKET.IO
+// ======================================================
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: allowedOrigin,
+    credentials: true,
     methods: ['GET', 'POST'],
   },
 });
 
-// Middleware
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-}));
+// ======================================================
+// API ROUTES
+// ======================================================
 
-app.options(/.*/, cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-}));
-
-app.use(express.json({ limit: '10mb' }));
-
-// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/problems', problemRoutes);
 app.use('/api/submissions', submissionRoutes);
@@ -50,23 +70,43 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 
-// Health check
+// ======================================================
+// HEALTH CHECK
+// ======================================================
+
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// Setup Socket.io
+// ======================================================
+// SOCKET HANDLER
+// ======================================================
+
 setupSocket(io);
 
-// Start server
+// ======================================================
+// START SERVER
+// ======================================================
+
 const PORT = process.env.PORT || 5000;
 
 const start = async () => {
-  await connectDB();
-  await seedProblems();
-  server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  try {
+    await connectDB();
+
+    await seedProblems();
+
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Client URL: ${allowedOrigin}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
 };
 
 start();
