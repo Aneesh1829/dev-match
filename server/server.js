@@ -28,7 +28,7 @@ const app = express();
 const server = http.createServer(app);
 
 // ======================================================
-// ENVIRONMENT VARIABLES
+// ENVIRONMENT
 // ======================================================
 
 const PORT = process.env.PORT || 5000;
@@ -37,18 +37,51 @@ const allowedOrigin =
   process.env.CLIENT_URL || 'http://localhost:5173';
 
 console.log('======================================');
-console.log('Starting Dev Match Backend');
+console.log('STARTING DEV MATCH BACKEND');
 console.log('======================================');
 console.log('PORT:', PORT);
 console.log('CLIENT_URL:', allowedOrigin);
 console.log('======================================');
 
 // ======================================================
-// CORS CONFIGURATION
+// CORS
 // ======================================================
 
+// We use a dynamic origin instead of requiring one exact
+// Vercel URL. This handles Vercel deployment/preview URLs
+// as well as the production URL.
+
 const corsOptions = {
-  origin: allowedOrigin,
+  origin: function (origin, callback) {
+
+    // Requests without an Origin header
+    // (Postman, server-to-server, direct browser navigation, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Allow Vercel deployments
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+
+    // Allow local development
+    if (
+      origin === 'http://localhost:5173' ||
+      origin === 'http://127.0.0.1:5173'
+    ) {
+      return callback(null, true);
+    }
+
+    // Allow the exact production URL
+    if (origin === allowedOrigin) {
+      return callback(null, true);
+    }
+
+    console.log('CORS rejected origin:', origin);
+
+    return callback(null, false);
+  },
 
   credentials: true,
 
@@ -70,12 +103,70 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-// CORS middleware.
-//
-// IMPORTANT:
-// app.use(cors(...)) handles CORS preflight requests
-// automatically for all routes.
+// ======================================================
+// EXPLICIT PREFLIGHT HANDLER
+// ======================================================
 
+// IMPORTANT:
+// This is BEFORE the API routes.
+// Every OPTIONS request gets a response here.
+
+app.use((req, res, next) => {
+
+  if (req.method !== 'OPTIONS') {
+    return next();
+  }
+
+  const origin = req.headers.origin;
+
+  console.log('======================================');
+  console.log('CORS PREFLIGHT');
+  console.log('METHOD:', req.method);
+  console.log('PATH:', req.originalUrl);
+  console.log('ORIGIN:', origin);
+  console.log(
+    'REQUESTED METHOD:',
+    req.headers['access-control-request-method']
+  );
+  console.log(
+    'REQUESTED HEADERS:',
+    req.headers['access-control-request-headers']
+  );
+  console.log('======================================');
+
+  // Reflect the requesting origin.
+  // This is required when credentials are used.
+  if (origin) {
+    res.setHeader(
+      'Access-Control-Allow-Origin',
+      origin
+    );
+  }
+
+  res.setHeader(
+    'Access-Control-Allow-Credentials',
+    'true'
+  );
+
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS'
+  );
+
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization'
+  );
+
+  res.setHeader(
+    'Access-Control-Max-Age',
+    '86400'
+  );
+
+  return res.status(204).end();
+});
+
+// Normal CORS middleware for actual requests
 app.use(cors(corsOptions));
 
 // ======================================================
@@ -83,23 +174,10 @@ app.use(cors(corsOptions));
 // ======================================================
 
 app.use((req, res, next) => {
+
   console.log(
     `${new Date().toISOString()} | ${req.method} ${req.originalUrl}`
   );
-
-  if (req.method === 'OPTIONS') {
-    console.log('--- CORS PREFLIGHT ---');
-    console.log('Origin:', req.headers.origin);
-    console.log(
-      'Requested Method:',
-      req.headers['access-control-request-method']
-    );
-    console.log(
-      'Requested Headers:',
-      req.headers['access-control-request-headers']
-    );
-    console.log('----------------------');
-  }
 
   next();
 });
@@ -119,10 +197,12 @@ app.use(
 // ======================================================
 
 app.get('/', (req, res) => {
+
   res.status(200).json({
     message: 'Dev Match Backend is running',
     status: 'ok'
   });
+
 });
 
 // ======================================================
@@ -130,10 +210,12 @@ app.get('/', (req, res) => {
 // ======================================================
 
 app.get('/api/health', (req, res) => {
+
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString()
   });
+
 });
 
 // ======================================================
@@ -141,41 +223,85 @@ app.get('/api/health', (req, res) => {
 // ======================================================
 
 const io = new Server(server, {
+
   cors: {
-    origin: allowedOrigin,
+    origin: function (origin, callback) {
+
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (
+        origin.endsWith('.vercel.app') ||
+        origin === allowedOrigin ||
+        origin === 'http://localhost:5173' ||
+        origin === 'http://127.0.0.1:5173'
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(null, false);
+    },
+
     credentials: true,
+
     methods: [
       'GET',
       'POST'
     ]
   }
+
 });
 
 // ======================================================
 // API ROUTES
 // ======================================================
 
-app.use('/api/auth', authRoutes);
+app.use(
+  '/api/auth',
+  authRoutes
+);
 
-app.use('/api/problems', problemRoutes);
+app.use(
+  '/api/problems',
+  problemRoutes
+);
 
-app.use('/api/submissions', submissionRoutes);
+app.use(
+  '/api/submissions',
+  submissionRoutes
+);
 
-app.use('/api/social', socialRoutes);
+app.use(
+  '/api/social',
+  socialRoutes
+);
 
-app.use('/api/messages', messageRoutes);
+app.use(
+  '/api/messages',
+  messageRoutes
+);
 
-app.use('/api/users', userRoutes);
+app.use(
+  '/api/users',
+  userRoutes
+);
 
-app.use('/api/recommendations', recommendationRoutes);
+app.use(
+  '/api/recommendations',
+  recommendationRoutes
+);
 
 // ======================================================
 // 404 HANDLER
 // ======================================================
 
 app.use((req, res) => {
+
   console.log(
-    `404: ${req.method} ${req.originalUrl}`
+    '404:',
+    req.method,
+    req.originalUrl
   );
 
   res.status(404).json({
@@ -183,6 +309,7 @@ app.use((req, res) => {
     method: req.method,
     path: req.originalUrl
   });
+
 });
 
 // ======================================================
@@ -196,7 +323,9 @@ setupSocket(io);
 // ======================================================
 
 const start = async () => {
+
   try {
+
     console.log('Connecting to MySQL...');
 
     await connectDB();
@@ -213,6 +342,7 @@ const start = async () => {
       PORT,
       '0.0.0.0',
       () => {
+
         console.log('======================================');
         console.log(
           `Server running on port ${PORT}`
@@ -221,17 +351,21 @@ const start = async () => {
           `Client URL: ${allowedOrigin}`
         );
         console.log('======================================');
+
       }
     );
 
   } catch (error) {
+
     console.error(
-      'Failed to start server:',
+      'FAILED TO START SERVER:',
       error
     );
 
     process.exit(1);
+
   }
+
 };
 
 start();
