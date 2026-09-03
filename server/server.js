@@ -9,7 +9,7 @@ const { setupSocket } = require('./services/socketHandler');
 const seedProblems = require('./utils/seedProblems');
 
 // ======================================================
-// ROUTE IMPORTS
+// ROUTES
 // ======================================================
 
 const authRoutes = require('./routes/auth');
@@ -21,7 +21,7 @@ const userRoutes = require('./routes/users');
 const recommendationRoutes = require('./routes/recommendations');
 
 // ======================================================
-// APP SETUP
+// APP
 // ======================================================
 
 const app = express();
@@ -31,36 +31,16 @@ const server = http.createServer(app);
 // ENVIRONMENT
 // ======================================================
 
+const PORT = process.env.PORT || 5000;
+
 const allowedOrigin =
   process.env.CLIENT_URL || 'http://localhost:5173';
-
-const PORT = process.env.PORT || 5000;
 
 console.log('======================================');
 console.log('Starting Dev Match Backend');
 console.log('PORT:', PORT);
 console.log('CLIENT_URL:', allowedOrigin);
 console.log('======================================');
-
-// ======================================================
-// BASIC TEST ROUTES
-// ======================================================
-
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Dev Match Backend is running',
-    status: 'ok',
-  });
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-  });
-});
 
 // ======================================================
 // CORS
@@ -75,45 +55,65 @@ const corsOptions = {
     'PUT',
     'PATCH',
     'DELETE',
-    'OPTIONS',
+    'OPTIONS'
   ],
   allowedHeaders: [
     'Content-Type',
-    'Authorization',
-  ],
+    'Authorization'
+  ]
 };
 
-// Normal CORS middleware
+// CORS middleware
 app.use(cors(corsOptions));
 
-// Explicit preflight handling
+// IMPORTANT:
+// Explicitly handle ALL OPTIONS requests.
+// Do NOT use app.options(/.*/, ...)
+
 app.use((req, res, next) => {
+
   if (req.method === 'OPTIONS') {
-    console.log('OPTIONS request:', req.originalUrl);
+
+    console.log('======================================');
+    console.log('CORS PREFLIGHT REQUEST');
+    console.log('Path:', req.originalUrl);
     console.log('Origin:', req.headers.origin);
-
-    res.header(
-      'Access-Control-Allow-Origin',
-      allowedOrigin
+    console.log(
+      'Requested Method:',
+      req.headers['access-control-request-method']
     );
-
-    res.header(
-      'Access-Control-Allow-Credentials',
-      'true'
+    console.log(
+      'Requested Headers:',
+      req.headers['access-control-request-headers']
     );
+    console.log('======================================');
 
-    res.header(
+    const requestOrigin = req.headers.origin;
+
+    // Allow the deployed frontend
+    if (requestOrigin === allowedOrigin) {
+      res.setHeader(
+        'Access-Control-Allow-Origin',
+        allowedOrigin
+      );
+
+      res.setHeader(
+        'Access-Control-Allow-Credentials',
+        'true'
+      );
+    }
+
+    res.setHeader(
       'Access-Control-Allow-Methods',
       'GET,POST,PUT,PATCH,DELETE,OPTIONS'
     );
 
-    res.header(
+    res.setHeader(
       'Access-Control-Allow-Headers',
-      req.headers['access-control-request-headers'] ||
-        'Content-Type, Authorization'
+      'Content-Type, Authorization'
     );
 
-    return res.sendStatus(204);
+    return res.status(204).end();
   }
 
   next();
@@ -126,6 +126,28 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 
 // ======================================================
+// ROOT TEST
+// ======================================================
+
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: 'Dev Match Backend is running',
+    status: 'ok'
+  });
+});
+
+// ======================================================
+// HEALTH CHECK
+// ======================================================
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ======================================================
 // SOCKET.IO
 // ======================================================
 
@@ -133,8 +155,8 @@ const io = new Server(server, {
   cors: {
     origin: allowedOrigin,
     credentials: true,
-    methods: ['GET', 'POST'],
-  },
+    methods: ['GET', 'POST']
+  }
 });
 
 // ======================================================
@@ -142,11 +164,17 @@ const io = new Server(server, {
 // ======================================================
 
 app.use('/api/auth', authRoutes);
+
 app.use('/api/problems', problemRoutes);
+
 app.use('/api/submissions', submissionRoutes);
+
 app.use('/api/social', socialRoutes);
+
 app.use('/api/messages', messageRoutes);
+
 app.use('/api/users', userRoutes);
+
 app.use('/api/recommendations', recommendationRoutes);
 
 // ======================================================
@@ -154,13 +182,19 @@ app.use('/api/recommendations', recommendationRoutes);
 // ======================================================
 
 app.use((req, res) => {
-  console.log('404:', req.method, req.originalUrl);
+
+  console.log(
+    '404:',
+    req.method,
+    req.originalUrl
+  );
 
   res.status(404).json({
     error: 'Route not found',
     method: req.method,
-    path: req.originalUrl,
+    path: req.originalUrl
   });
+
 });
 
 // ======================================================
@@ -174,25 +208,43 @@ setupSocket(io);
 // ======================================================
 
 const start = async () => {
+
   try {
-    // Connect to MySQL
+
+    console.log('Connecting to MySQL...');
+
     await connectDB();
 
-    // Seed problems
+    console.log('MySQL connection successful');
+
     await seedProblems();
 
-    // Start HTTP server
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log('======================================');
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Client URL: ${allowedOrigin}`);
-      console.log('======================================');
-    });
+    console.log('Database initialization complete');
+
+    server.listen(
+      PORT,
+      '0.0.0.0',
+      () => {
+
+        console.log('======================================');
+        console.log(`Server running on port ${PORT}`);
+        console.log(`Client URL: ${allowedOrigin}`);
+        console.log('======================================');
+
+      }
+    );
 
   } catch (error) {
-    console.error('Failed to start server:', error);
+
+    console.error(
+      'Failed to start server:',
+      error
+    );
+
     process.exit(1);
+
   }
+
 };
 
 start();
